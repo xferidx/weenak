@@ -3,162 +3,352 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ملاحة العراق - Iraq Navigation</title>
+    <title>ملاحة العراق المتقدمة - Iraq GPS Pro</title>
 
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        html, body, #map { width: 100%; height: 100%; overflow: hidden; }
+        :root {
+            --primary: #00e676;
+            --primary-dark: #00b248;
+            --bg-glass: rgba(18, 22, 33, 0.92);
+            --border-glass: rgba(255, 255, 255, 0.12);
+            --danger: #ff5252;
+        }
 
-        /* شريط التوجيه العلوي */
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        html, body, #map { width: 100%; height: 100%; overflow: hidden; background: #0b0f19; }
+
+        /* منطقة البحث العلوية والوجهات المفضلة */
+        #top-container {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            right: 12px;
+            z-index: 1001;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        .search-box {
+            position: relative;
+            display: flex;
+            align-items: center;
+            background: var(--bg-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 28px;
+            padding: 6px 14px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            backdrop-filter: blur(10px);
+        }
+
+        .search-box input {
+            flex-grow: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #fff;
+            font-size: 15px;
+            padding: 8px;
+        }
+
+        .search-box input::placeholder { color: #8fa0b5; }
+
+        /* اقتراحات البحث */
+        #search-results {
+            background: var(--bg-glass);
+            border-radius: 16px;
+            border: 1px solid var(--border-glass);
+            max-height: 220px;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+            display: none;
+            flex-direction: column;
+        }
+
+        .search-item {
+            padding: 12px 16px;
+            color: #fff;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .search-item:hover { background: rgba(255,255,255,0.1); }
+
+        /* أزرار المنزل، العمل، والسجل */
+        .quick-destinations {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding-bottom: 2px;
+        }
+
+        .quick-chip {
+            background: var(--bg-glass);
+            color: #e0e0e0;
+            border: 1px solid var(--border-glass);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* شاشة الملاحة العلوية (HUD) */
         #nav-hud {
             position: absolute;
-            top: 15px;
-            left: 15px;
-            right: 15px;
-            background: rgba(20, 24, 33, 0.95);
+            top: 12px;
+            left: 12px;
+            right: 12px;
+            background: #111827;
             color: #fff;
             padding: 16px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-            z-index: 1000;
+            border-radius: 18px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            z-index: 1002;
             display: none;
-            flex-direction: row;
             align-items: center;
-            border: 1px solid rgba(255,255,255,0.1);
+            border: 1.5px solid #22c55e;
+            max-width: 480px;
+            margin: 0 auto;
         }
 
-        #nav-hud .icon {
-            font-size: 38px;
-            margin-left: 15px;
-            color: #4CAF50;
-        }
+        #nav-hud .icon { font-size: 40px; margin-left: 12px; }
+        #nav-hud .distance { font-size: 24px; font-weight: 800; color: #22c55e; }
+        #nav-hud .instruction { font-size: 15px; color: #d1d5db; margin-top: 3px; font-weight: 500; }
 
-        #nav-hud .info {
-            flex-grow: 1;
-        }
-
-        #nav-hud .distance {
-            font-size: 22px;
-            font-weight: bold;
-            color: #4CAF50;
-        }
-
-        #nav-hud .instruction {
-            font-size: 16px;
-            color: #e0e0e0;
-            margin-top: 4px;
-        }
-
-        /* اللوحة السفلية للتحكم */
-        #controls {
+        /* لوحة الملاحة السفلية (السرعة، الوقت المتبقي، إلغاء) */
+        #bottom-hud {
             position: absolute;
-            bottom: 25px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #ffffff;
+            bottom: 20px;
+            left: 12px;
+            right: 12px;
+            background: var(--bg-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 24px;
             padding: 12px 20px;
-            border-radius: 30px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            z-index: 1000;
-            display: flex;
-            gap: 10px;
+            z-index: 1001;
+            display: none;
+            justify-content: space-between;
             align-items: center;
+            backdrop-filter: blur(12px);
+            max-width: 480px;
+            margin: 0 auto;
+            color: #fff;
         }
 
-        button {
-            padding: 10px 18px;
-            border: none;
-            border-radius: 20px;
-            font-size: 15px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: 0.2s;
+        .stat-block { display: flex; flex-direction: column; align-items: center; }
+        .stat-val { font-size: 20px; font-weight: 700; color: #fff; }
+        .stat-lbl { font-size: 11px; color: #9ca3af; }
+
+        /* الأزرار العائمة على الجانب */
+        .fab-container {
+            position: absolute;
+            left: 14px;
+            bottom: 90px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 999;
         }
 
-        .btn-start { background: #2e7d32; color: #fff; }
-        .btn-start:hover { background: #1b5e20; }
-        .btn-stop { background: #c62828; color: #fff; }
-        .btn-stop:hover { background: #8e0000; }
-
-        /* مؤشر موقع المستخدم */
-        .user-marker {
-            width: 18px;
-            height: 18px;
-            background: #2196F3;
-            border: 3px solid #fff;
+        .fab {
+            width: 44px;
+            height: 44px;
+            background: var(--bg-glass);
+            border: 1px solid var(--border-glass);
             border-radius: 50%;
-            box-shadow: 0 0 10px rgba(33, 150, 243, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            font-size: 18px;
+            color: white;
+            backdrop-filter: blur(8px);
+        }
+
+        /* مؤشر السيارة الحديث */
+        .car-marker {
+            width: 22px;
+            height: 22px;
+            background: #00e676;
+            border: 3.5px solid #ffffff;
+            border-radius: 50%;
+            box-shadow: 0 0 16px rgba(0, 230, 118, 0.9);
         }
     </style>
 </head>
 <body>
 
-    <!-- شاشة الملاحة العلوية (HUD) -->
+    <!-- الجزء العلوي: البحث والأماكن المفضلة -->
+    <div id="top-container">
+        <div class="search-box">
+            <span style="font-size:16px; margin-left:6px;">🔍</span>
+            <input type="text" id="search-input" placeholder="ابحث عن مكان في العراق..." autocomplete="off">
+            <span id="clear-search" style="cursor:pointer; display:none; padding:4px;" onclick="clearSearch()">✕</span>
+        </div>
+        <div id="search-results"></div>
+
+        <div class="quick-destinations" id="quick-bar">
+            <div class="quick-chip" onclick="navigateToSaved('home')">🏠 المنزل</div>
+            <div class="quick-chip" onclick="navigateToSaved('work')">💼 العمل</div>
+            <div class="quick-chip" onclick="showRecents()">🕒 الأماكن الأخيرة</div>
+        </div>
+    </div>
+
+    <!-- شاشة الملاحة العلوية (Turn HUD) -->
     <div id="nav-hud">
         <div class="icon" id="hud-icon">⬆️</div>
         <div class="info">
-            <div class="distance" id="hud-distance">0 م</div>
-            <div class="instruction" id="hud-text">جاهز للانطلاق</div>
+            <div class="distance" id="hud-dist">0 م</div>
+            <div class="instruction" id="hud-instruction">استمر في المسار</div>
         </div>
     </div>
 
     <!-- الخريطة -->
     <div id="map"></div>
 
-    <!-- أزرار التحكم -->
-    <div id="controls">
-        <span id="status-text" style="font-size: 14px; color: #333;">انقر على الخريطة لتحديد الوجهة</span>
-        <button id="start-btn" class="btn-start" style="display:none;" onclick="startNavigation()">ابدأ الملاحة</button>
-        <button id="stop-btn" class="btn-stop" style="display:none;" onclick="stopNavigation()">إلغاء</button>
+    <!-- الأزرار العائمة الجانبية -->
+    <div class="fab-container">
+        <div class="fab" id="layer-btn" title="تبديل الخريطة" onclick="toggleLayer()">🛰️</div>
+        <div class="fab" id="sound-btn" title="كتم/تشغيل الصوت" onclick="toggleVoice()">🔊</div>
+        <div class="fab" id="recenter-btn" title="تمركز على موقعي" onclick="recenterMap()">🎯</div>
+    </div>
+
+    <!-- الشريط السفلي للملاحة -->
+    <div id="bottom-hud">
+        <div class="stat-block">
+            <div class="stat-val" id="hud-speed">0</div>
+            <div class="stat-lbl">كم / س</div>
+        </div>
+        <div class="stat-block">
+            <div class="stat-val" id="hud-eta">--:--</div>
+            <div class="stat-lbl">الوصول</div>
+        </div>
+        <div class="stat-block">
+            <div class="stat-val" id="hud-remaining-dist">0 كم</div>
+            <div class="stat-lbl">المتبقي</div>
+        </div>
+        <button style="background:var(--danger); border:none; color:#fff; padding:8px 14px; border-radius:14px; font-weight:bold; cursor:pointer;" onclick="stopNavigation()">إنهاء</button>
     </div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // إحداثيات البداية الافتراضية (بغداد)
-        const DEFAULT_COORDS = [33.3152, 44.3661];
+        // إعدادات البداية (مركز العراق - بغداد)
+        const DEFAULT_LOCATION = [33.3152, 44.3661];
 
+        // طبقات الخريطة
+        const satelliteLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&hl=ar&x={x}&y={y}&z={z}', { maxZoom: 20 });
+        const roadsLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&hl=ar&x={x}&y={y}&z={z}', { maxZoom: 20 });
+
+        let currentLayer = 'satellite';
         let map, userMarker, destMarker, routeLine;
         let userPos = null;
         let destPos = null;
         let navSteps = [];
+        let fullRouteCoordinates = [];
         let currentStepIndex = 0;
         let watchId = null;
         let isNavigating = false;
-        let lastSpokenStep = -1;
+        let isVoiceEnabled = true;
+        let wakeLock = null;
+        let lastAnnouncedDistance = null;
 
-        // تهيئة الخريطة
-        function initMap() {
-            map = L.map('map', {
-                zoomControl: false,
-                attributionControl: false
-            }).setView(DEFAULT_COORDS, 14);
+        // إدارة التخزين المحلي (Local Storage)
+        const Storage = {
+            getSavedPlaces() {
+                return JSON.parse(localStorage.getItem('iq_saved_places') || '{}');
+            },
+            savePlace(type, place) {
+                const current = this.getSavedPlaces();
+                current[type] = place;
+                localStorage.setItem('iq_saved_places', JSON.stringify(current));
+            },
+            getRecents() {
+                return JSON.parse(localStorage.getItem('iq_recents') || '[]');
+            },
+            addRecent(place) {
+                let recents = this.getRecents().filter(r => r.name !== place.name);
+                recents.unshift(place);
+                if (recents.length > 5) recents.pop();
+                localStorage.setItem('iq_recents', JSON.stringify(recents));
+            }
+        };
 
-            // طبقة خرائط Google Satellite Hybrid (أحدث قمر صناعي + أسماء الطرق بالعربية)
-            L.tileLayer('https://mt1.google.com/vt/lyrs=y&hl=ar&x={x}&y={y}&z={z}', {
-                maxZoom: 20
-            }).addTo(map);
+        // تهيئة النظام
+        function initApp() {
+            map = L.map('map', { zoomControl: false, attributionControl: false }).setView(DEFAULT_LOCATION, 14);
+            satelliteLayer.addTo(map);
 
-            // النقر على الخريطة لاختيار الوجهة
+            setupGeolocation();
+            setupSearch();
+
             map.on('click', (e) => {
                 if (isNavigating) return;
-                setDestination(e.latlng.lat, e.latlng.lng);
+                setDestination(e.latlng.lat, e.latlng.lng, "وجهة محددة على الخريطة");
             });
-
-            // بدء تحديد الموقع
-            getUserLocation();
         }
 
-        // قراءة موقع المستخدم الحقيقي
-        function getUserLocation() {
-            if (!navigator.geolocation) {
-                alert("جهازك لا يدعم تحديد المواقع GPS");
-                return;
+        // إبقاء الشاشة مضاءة (Wake Lock API)
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                } catch (err) {
+                    console.log("Wake Lock غير مدعوم أو مرفوض:", err);
+                }
             }
+        }
+
+        // التبديل بين قمر صناعي وطرق عادية
+        function toggleLayer() {
+            if (currentLayer === 'satellite') {
+                map.removeLayer(satelliteLayer);
+                roadsLayer.addTo(map);
+                currentLayer = 'roads';
+                document.getElementById('layer-btn').innerText = '🗺️';
+            } else {
+                map.removeLayer(roadsLayer);
+                satelliteLayer.addTo(map);
+                currentLayer = 'satellite';
+                document.getElementById('layer-btn').innerText = '🛰️';
+            }
+        }
+
+        // تفعيل / كتم الصوت
+        function toggleVoice() {
+            isVoiceEnabled = !isVoiceEnabled;
+            document.getElementById('sound-btn').innerText = isVoiceEnabled ? '🔊' : '🔇';
+            if (!isVoiceEnabled && 'speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+        }
+
+        // النطق الصوتي العربي
+        function speak(text) {
+            if (!isVoiceEnabled || !('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ar-SA';
+            utterance.rate = 1.0;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // تتبع الموقع والسرعة
+        function setupGeolocation() {
+            if (!navigator.geolocation) return;
 
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
@@ -166,197 +356,301 @@
                     updateUserMarker(userPos);
                     map.setView(userPos, 16);
                 },
-                (err) => {
-                    console.warn("تعذر الحصول على الموقع الدقيق، تم الاعتماد على الموقع الافتراضي.");
-                    userPos = DEFAULT_COORDS;
-                    updateUserMarker(userPos);
-                },
+                null,
                 { enableHighAccuracy: true }
+            );
+
+            watchId = navigator.geolocation.watchPosition(
+                handlePositionUpdate,
+                (err) => console.error("GPS Error:", err),
+                { enableHighAccuracy: true, maximumAge: 1000 }
             );
         }
 
         function updateUserMarker(coords) {
             if (!userMarker) {
-                const icon = L.divIcon({ className: 'user-marker', iconSize: [18, 18], iconAnchor: [9, 9] });
+                const icon = L.divIcon({ className: 'car-marker', iconSize: [22, 22], iconAnchor: [11, 11] });
                 userMarker = L.marker(coords, { icon: icon }).addTo(map);
             } else {
                 userMarker.setLatLng(coords);
             }
         }
 
-        // تحديد الوجهة ورسم المسار
-        function setDestination(lat, lng) {
+        function recenterMap() {
+            if (userPos) map.setView(userPos, 17, { animate: true });
+        }
+
+        // محرك البحث الجغرافي للعراق (Debounced Nominatim API)
+        let debounceTimer;
+        function setupSearch() {
+            const input = document.getElementById('search-input');
+            const resultsBox = document.getElementById('search-results');
+            const clearBtn = document.getElementById('clear-search');
+
+            input.addEventListener('input', () => {
+                clearTimeout(debounceTimer);
+                const query = input.value.trim();
+                clearBtn.style.display = query ? 'block' : 'none';
+
+                if (query.length < 3) {
+                    resultsBox.style.display = 'none';
+                    return;
+                }
+
+                debounceTimer = setTimeout(async () => {
+                    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=iq&accept-language=ar&limit=5`;
+                    try {
+                        const res = await fetch(url);
+                        const items = await res.json();
+                        renderSearchResults(items);
+                    } catch (e) {
+                        console.error(e);
+                    }
+                }, 350);
+            });
+        }
+
+        function clearSearch() {
+            document.getElementById('search-input').value = '';
+            document.getElementById('search-results').style.display = 'none';
+            document.getElementById('clear-search').style.display = 'none';
+        }
+
+        function renderSearchResults(items) {
+            const box = document.getElementById('search-results');
+            box.innerHTML = '';
+            if (items.length === 0) {
+                box.style.display = 'none';
+                return;
+            }
+
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'search-item';
+                div.innerText = item.display_name;
+                div.onclick = () => {
+                    const lat = parseFloat(item.lat);
+                    const lon = parseFloat(item.lon);
+                    clearSearch();
+                    setDestination(lat, lon, item.display_name.split(',')[0]);
+                };
+                box.appendChild(div);
+            });
+            box.style.display = 'flex';
+        }
+
+        // الأماكن المحفوظة (المنزل والعمل)
+        function navigateToSaved(type) {
+            const saved = Storage.getSavedPlaces();
+            if (saved[type]) {
+                setDestination(saved[type].lat, saved[type].lng, saved[type].name);
+            } else {
+                const label = type === 'home' ? 'المنزل' : 'العمل';
+                if (confirm(`لم تقم بتحديد موقع ${label} بعد. هل تريد تعيين موقعك الحالي كـ ${label}؟`)) {
+                    if (!userPos) return alert("يرجى تفعيل الـ GPS أولاً.");
+                    Storage.savePlace(type, { lat: userPos[0], lng: userPos[1], name: label });
+                    alert(`تم حفظ موقع ${label} بنجاح!`);
+                }
+            }
+        }
+
+        function showRecents() {
+            const recents = Storage.getRecents();
+            if (recents.length === 0) return alert("لا يوجد سجل أماكن بعد.");
+
+            const box = document.getElementById('search-results');
+            box.innerHTML = '<div style="padding:10px; font-weight:bold; color:#00e676;">الأماكن الأخيرة:</div>';
+            recents.forEach(r => {
+                const div = document.createElement('div');
+                div.className = 'search-item';
+                div.innerText = `📍 ${r.name}`;
+                div.onclick = () => {
+                    box.style.display = 'none';
+                    setDestination(r.lat, r.lng, r.name);
+                };
+                box.appendChild(div);
+            });
+            box.style.display = 'flex';
+        }
+
+        // اختيار الوجهة وبدء المسار
+        function setDestination(lat, lng, name) {
             destPos = [lat, lng];
 
             if (destMarker) map.removeLayer(destMarker);
             destMarker = L.marker(destPos).addTo(map);
 
+            Storage.addRecent({ name: name || 'وجهة غير مسماة', lat, lng });
+
             if (!userPos) {
-                alert("جاري تحديد موقعك الحالي أولاً...");
+                alert("جاري انتظار موقع الـ GPS الخاص بك...");
                 return;
             }
 
-            document.getElementById('status-text').innerText = "تم تحديد الوجهة، جاري حساب المسار...";
             fetchRoute(userPos, destPos);
         }
 
-        // حساب المسار عبر OSRM
+        // حساب المسار عبر OSRM مع التوجيه العربي
         async function fetchRoute(start, end) {
             const url = `https://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson&steps=true`;
 
             try {
                 const res = await fetch(url);
                 const data = await res.json();
-
-                if (!data.routes || data.routes.length === 0) {
-                    alert("لم يتم العثور على مسار متاح.");
-                    return;
-                }
+                if (!data.routes || !data.routes.length) return alert("لم يتم العثور على طريق مناسب.");
 
                 const route = data.routes[0];
-                const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+                fullRouteCoordinates = route.geometry.coordinates.map(c => [c[1], c[0]]);
 
                 if (routeLine) map.removeLayer(routeLine);
-                routeLine = L.polyline(coords, { color: '#00e5ff', weight: 6, opacity: 0.9 }).addTo(map);
-                map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+                routeLine = L.polyline(fullRouteCoordinates, { color: '#00e5ff', weight: 6, opacity: 0.9 }).addTo(map);
+                map.fitBounds(routeLine.getBounds(), { padding: [60, 60] });
 
-                // حفظ الخطوات
-                navSteps = route.legs[0].steps.map(step => {
-                    return {
-                        coords: [step.maneuver.location[1], step.maneuver.location[0]],
-                        type: step.maneuver.type,
-                        modifier: step.maneuver.modifier || '',
-                        name: step.name || 'شارع بدون اسم',
-                        distance: step.distance
-                    };
-                });
+                navSteps = route.legs[0].steps.map(step => ({
+                    coords: [step.maneuver.location[1], step.maneuver.location[0]],
+                    type: step.maneuver.type,
+                    modifier: step.maneuver.modifier || '',
+                    name: step.name || 'شارع فرعي',
+                    distance: step.distance
+                }));
 
-                document.getElementById('status-text').style.display = 'none';
-                document.getElementById('start-btn').style.display = 'inline-block';
+                startNavigationMode(route.duration, route.distance);
             } catch (err) {
-                alert("خطأ أثناء حساب المسار: " + err.message);
+                console.error("Route error:", err);
             }
         }
 
-        // تحويل نوع الحركة إلى نص صوتي عربي وأيقونة
-        function translateManeuver(type, modifier, street) {
-            let action = "استمر في السير";
+        // وضع الملاحة الحية
+        function startNavigationMode(durationSec, distanceMeters) {
+            isNavigating = true;
+            currentStepIndex = 0;
+            lastAnnouncedDistance = null;
+
+            document.getElementById('top-container').style.display = 'none';
+            document.getElementById('nav-hud').style.display = 'flex';
+            document.getElementById('bottom-hud').style.display = 'flex';
+
+            requestWakeLock();
+            updateTripMetrics(durationSec, distanceMeters);
+
+            speak("بدء الملاحة، نتمنى لك رحلة آمنة.");
+        }
+
+        // إيقاف الملاحة
+        function stopNavigation() {
+            isNavigating = false;
+            document.getElementById('nav-hud').style.display = 'none';
+            document.getElementById('bottom-hud').style.display = 'none';
+            document.getElementById('top-container').style.display = 'flex';
+
+            if (routeLine) map.removeLayer(routeLine);
+            if (destMarker) map.removeLayer(destMarker);
+            if (wakeLock) { wakeLock.release(); wakeLock = null; }
+            speak("تم إنهاء الملاحة.");
+        }
+
+        // التحديث اللحظي لحركة السائق
+        function handlePositionUpdate(pos) {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const speed = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0; // تحويل لمتر/ث إلى كم/س
+            userPos = [lat, lng];
+
+            updateUserMarker(userPos);
+
+            if (!isNavigating) return;
+
+            document.getElementById('hud-speed').innerText = speed;
+            map.panTo(userPos);
+
+            // 1. فحص الانحراف عن المسار (Off-Route Detection)
+            if (isOffRoute(userPos, fullRouteCoordinates, 45)) {
+                speak("أنت خارج المسار، جاري إعادة الحساب.");
+                fetchRoute(userPos, destPos);
+                return;
+            }
+
+            // 2. تحديث خطوات الانعطاف
+            if (navSteps.length > 0 && currentStepIndex < navSteps.length) {
+                const step = navSteps[currentStepIndex];
+                const distToManeuver = getDistanceMeters(lat, lng, step.coords[0], step.coords[1]);
+                const instruction = parseManeuver(step.type, step.modifier, step.name);
+
+                document.getElementById('hud-icon').innerText = instruction.icon;
+                document.getElementById('hud-instruction').innerText = instruction.text;
+                document.getElementById('hud-dist').innerText = distToManeuver > 1000 ? `${(distToManeuver/1000).toFixed(1)} كم` : `${Math.round(distToManeuver)} م`;
+
+                // التوجيه الصوتي الذكي على مراحل
+                if (distToManeuver <= 200 && distToManeuver > 60 && lastAnnouncedDistance !== '200m') {
+                    speak(`بعد 200 متر، ${instruction.text}`);
+                    lastAnnouncedDistance = '200m';
+                } else if (distToManeuver <= 35) {
+                    speak(`الآن، ${instruction.text}`);
+                    currentStepIndex++;
+                    lastAnnouncedDistance = null;
+
+                    if (currentStepIndex >= navSteps.length) {
+                        speak("لقد وصلت إلى وجهتك المقصودة.");
+                        stopNavigation();
+                    }
+                }
+            }
+        }
+
+        function updateTripMetrics(durationSec, distanceMeters) {
+            const minutes = Math.round(durationSec / 60);
+            const now = new Date();
+            now.setMinutes(now.getMinutes() + minutes);
+
+            const hours = String(now.getHours()).padStart(2, '0');
+            const mins = String(now.getMinutes()).padStart(2, '0');
+
+            document.getElementById('hud-eta').innerText = `${hours}:${mins}`;
+            document.getElementById('hud-remaining-dist').innerText = (distanceMeters / 1000).toFixed(1) + " كم";
+        }
+
+        // ترجمة المناورة بدقة
+        function parseManeuver(type, modifier, street) {
+            let action = "تابع السير";
             let icon = "⬆️";
 
             if (type === 'turn') {
                 if (modifier.includes('right')) { action = "انعطف يميناً"; icon = "➡️"; }
                 else if (modifier.includes('left')) { action = "انعطف يساراً"; icon = "⬅️"; }
             } else if (type === 'roundabout') {
-                action = "ادخل الدوار ثم اسلك المخرج";
+                action = "اسلك الدوار";
                 icon = "🔄";
             } else if (type === 'arrive') {
-                action = "لقد وصلت إلى وجهتك";
+                action = "الوجهة أمامك";
                 icon = "🏁";
             }
 
-            return { text: `${action} نحو ${street}`, icon: icon };
+            return { text: `${action} نحو ${street}`, icon };
         }
 
-        // النطق الصوتي باللغة العربية (TTS)
-        function speakArabic(text) {
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel(); // إيقاف أي صوت سابق
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'ar-SA';
-                utterance.rate = 0.95; // سرعة معتدلة لتكون واضحة أثناء القيادة
-                window.speechSynthesis.speak(utterance);
-            }
-        }
-
-        // بدء الملاحة التفاعلية (Turn-by-Turn)
-        function startNavigation() {
-            isNavigating = true;
-            currentStepIndex = 0;
-            lastSpokenStep = -1;
-
-            document.getElementById('start-btn').style.display = 'none';
-            document.getElementById('stop-btn').style.display = 'inline-block';
-            document.getElementById('nav-hud').style.display = 'flex';
-
-            speakArabic("بدء الملاحة. رحلة آمنة.");
-
-            // تتبع نظام GPS باستمرار
-            watchId = navigator.geolocation.watchPosition(
-                handlePositionUpdate,
-                (err) => console.error(err),
-                { enableHighAccuracy: true, maximumAge: 1000 }
-            );
-        }
-
-        // التعامل مع تحديثات موقع السائق
-        function handlePositionUpdate(pos) {
-            const currentLat = pos.coords.latitude;
-            const currentLng = pos.coords.longitude;
-            userPos = [currentLat, currentLng];
-
-            updateUserMarker(userPos);
-            map.panTo(userPos);
-
-            if (!navSteps || currentStepIndex >= navSteps.length) return;
-
-            const step = navSteps[currentStepIndex];
-            const dist = getDistanceInMeters(currentLat, currentLng, step.coords[0], step.coords[1]);
-            const instruction = translateManeuver(step.type, step.modifier, step.name);
-
-            // تحديث واجهة الـ HUD
-            document.getElementById('hud-icon').innerText = instruction.icon;
-            document.getElementById('hud-distance').innerText = dist > 1000 ? `${(dist/1000).toFixed(1)} كم` : `${Math.round(dist)} م`;
-            document.getElementById('hud-text').innerText = instruction.text;
-
-            // توجيه صوتي مسبق (على بعد 150 متر)
-            if (dist <= 150 && dist > 40 && lastSpokenStep !== currentStepIndex) {
-                speakArabic(`بعد 150 متراً، ${instruction.text}`);
-                lastSpokenStep = currentStepIndex;
-            }
-
-            // توجيه صوتي لحظي والانتقال للخطوة التالية (أقل من 30 متر)
-            if (dist <= 30) {
-                speakArabic(`الآن، ${instruction.text}`);
-                currentStepIndex++;
-
-                if (currentStepIndex >= navSteps.length) {
-                    speakArabic("لقد وصلت إلى وجهتك.");
-                    stopNavigation();
-                }
-            }
-        }
-
-        // حساب المسافة بين نقطتين (Haversine Formula)
-        function getDistanceInMeters(lat1, lon1, lat2, lon2) {
+        // معادلة المسافة بين نقطتين بالمتر
+        function getDistanceMeters(lat1, lon1, lat2, lon2) {
             const R = 6371e3;
             const φ1 = lat1 * Math.PI / 180;
             const φ2 = lat2 * Math.PI / 180;
             const Δφ = (lat2 - lat1) * Math.PI / 180;
             const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                      Math.cos(φ1) * Math.cos(φ2) *
-                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c;
+            const a = Math.sin(Δφ/2)**2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2)**2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         }
 
-        // إيقاف الملاحة
-        function stopNavigation() {
-            isNavigating = false;
-            if (watchId) navigator.geolocation.clearWatch(watchId);
-
-            document.getElementById('nav-hud').style.display = 'none';
-            document.getElementById('stop-btn').style.display = 'none';
-            document.getElementById('start-btn').style.display = 'none';
-            document.getElementById('status-text').style.display = 'block';
-            document.getElementById('status-text').innerText = "انقر على الخريطة لتحديد الوجهة";
-
-            if (routeLine) map.removeLayer(routeLine);
-            if (destMarker) map.removeLayer(destMarker);
+        // التحقق من خروج السائق عن المسار
+        function isOffRoute(point, polylineCoords, thresholdMeters) {
+            if (!polylineCoords || polylineCoords.length === 0) return false;
+            let minDistance = Infinity;
+            for (let i = 0; i < polylineCoords.length; i++) {
+                const d = getDistanceMeters(point[0], point[1], polylineCoords[i][0], polylineCoords[i][1]);
+                if (d < minDistance) minDistance = d;
+            }
+            return minDistance > thresholdMeters;
         }
 
-        window.onload = initMap;
+        window.onload = initApp;
     </script>
 </body>
 </html>
